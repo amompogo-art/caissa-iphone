@@ -1,0 +1,45 @@
+CAÏSSA PARA IPHONE · PAQUETE PWA
+================================
+
+El proyecto está adaptado desde el APK facilitado.
+La lógica original de torneos y la validación criptográfica de licencias se mantienen.
+La aplicación requiere una dirección HTTPS para activar el sistema criptográfico
+(es preferible usar GitHub Pages; abrir index.html como archivo local no basta).
+
+PUBLICAR EN GITHUB PAGES:
+1. Accede a github.com con tu cuenta.
+2. Crea un nuevo repositorio llamado, por ejemplo, caissa-iphone.
+   Con un plan gratuito de GitHub Pages, el repositorio debe ser PUBLICO.
+3. Descomprime este ZIP en tu ordenador.
+4. En el repositorio, elige Add file > Upload files, y SUBE LOS ARCHIVOS
+   (todos los archivos deben quedar en la raiz del repositorio,
+   NO dentro de otra carpeta Caissa_iPhone_PWA).
+5. Haz clic en Commit changes.
+6. Abre Settings > Pages y en Build and deployment selecciona
+   Source: Deploy from a branch; Branch: main; Folder: /(root). Guarda.
+7. Espera a que GitHub publique tu web y abre la direccion HTTPS indicada
+   en esa misma pantalla (sera parecida a https://usuario.github.io/caissa-iphone/).
+
+INSTALAR EN IPHONE:
+1. Desde tu iPhone, abre la direccion HTTPS anterior EN SAFARI.
+2. Pulsa Compartir > Añadir a pantalla de inicio.
+3. Activa 'Abrir como app web', cuando aparezca, y pulsa Añadir.
+4. Abre el nuevo icono de Caïssa en la pantalla de inicio.
+5. Activa la nueva instalación con un codigo de licencia válido para
+   el código de equipo del iPhone. El de Android puede no servir.
+
+NOTAS IMPORTANTES:
+- NO publiques ni subas a GitHub los codigos privados de activacion ni
+  archivos JSON que contengan datos personales de torneos y jugadores.
+- La web es accesible a terceros si el repositorio es público. Caïssa seguirá
+  mostrando su pantalla de licencia, pero el código HTML será público.
+- Los torneos de Android no están en el APK: hay que EXPORTAR el JSON
+  desde Android e IMPORTARLO desde iPhone, una vez activado.
+- Los datos y la licencia se guardan en el almacenamiento local del iPhone.
+  No borres los datos de la web ni desinstales la app sin exportar una copia.
+- El uso sin conexión empieza después de abrir la app conectada, terminar su
+  instalación y guardar en caché los recursos propios. Las fuentes de Google
+  pueden necesitar conexión y se sustituyen por fuentes locales sin ella.
+- Los flujos de imprimir, importar y exportar deberán probarse en un iPhone
+  físico; Safari puede presentar los cuadros de impresión y archivos distintos.
+- No se ha generado un IPA nativo, sino una PWA sin App Store.

@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "Caïssa · Organizador de Torneos de Ajedrez",
+  "short_name": "Caïssa",
+  "description": "Organización de torneos de ajedrez, jugadores, rondas y clasificaciones.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#13100e",
+  "theme_color": "#13100e",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
