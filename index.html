@@ -97,7 +97,7 @@ code{background:#120f0c;border:1px solid var(--line);padding:1px 6px;border-radi
 .stat b{display:block;font:600 24px var(--display);color:var(--gold2)}
 .stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
 /* ---------- Jugadores ---------- */
-.addrow{display:grid;grid-template-columns:2fr 92px 110px 1.4fr auto;gap:10px}
+.addrow{display:grid;grid-template-columns:1.8fr 88px 105px 112px 1.2fr auto;gap:10px}
 details.bulk{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
 details.bulk summary{cursor:pointer;color:var(--gold2);font-weight:500}
 details.bulk textarea{margin:10px 0;resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:13px}
@@ -164,6 +164,17 @@ tr.top1 .rank{color:#e8cf96}tr.top2 .rank{color:#cfd3d8}tr.top3 .rank{color:#d39
 .pod .base{margin-top:12px;border-radius:12px 12px 0 0;background:linear-gradient(180deg,#3a2f25,#1d1814);border:1px solid var(--line2);border-bottom:0;display:grid;place-items:center;font:700 28px var(--display);color:var(--gold2)}
 .pod.p1 .base{height:120px}.pod.p2 .base{height:86px;color:#cfd3d8}.pod.p3 .base{height:62px;color:#d39b6a}
 .legend{margin-top:14px;font-size:12px;color:var(--dim)}
+/* ---------- Base de jugadores y solicitudes de BYE ---------- */
+.fide-mark{font-family:ui-monospace,Consolas,monospace;color:var(--gold2);font-size:12px}
+.library-tools{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.lib-pick{accent-color:var(--gold);width:18px;height:18px;cursor:pointer}
+.lib-mini{font-size:12px;color:var(--muted)}
+.info-note{padding:12px 14px;margin:14px 0;border:1px solid var(--line2);background:#1a1512;border-radius:10px;color:var(--muted);font-size:13px}
+.bye-request{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:13px 14px;background:#17130f;border:1px solid var(--line2);border-radius:10px;margin-top:8px}
+.bye-request strong{color:var(--ivory)}
+.bye-tag{display:inline-block;padding:3px 9px;border:1px solid var(--gold);border-radius:999px;font-size:11px;color:var(--gold2);white-space:nowrap}
+@media(max-width:1000px){.addrow{grid-template-columns:repeat(3,minmax(0,1fr))}.addrow #pName{grid-column:span 2}}
+@media(max-width:780px){.addrow{grid-template-columns:1fr 1fr}.addrow #pName,.addrow button{grid-column:1/-1}}
 /* ---------- Cuadro eliminatorio ---------- */
 .bracket{display:flex;overflow-x:auto;padding:4px 0 14px}
 .bcol{display:flex;flex-direction:column;min-width:250px}
@@ -313,6 +324,8 @@ body.locked .wrap{display:none}
   <nav class="tabs">
     <button class="tab" data-tab="torneo" onclick="go('torneo')"><span class="pc">♔</span>Torneo</button>
     <button class="tab" data-tab="jugadores" onclick="go('jugadores')"><span class="pc">♙</span>Jugadores</button>
+    <button class="tab" data-tab="biblioteca" onclick="go('biblioteca')"><span class="pc">♙</span>Base de jugadores</button>
+    <button class="tab" data-tab="byes" onclick="go('byes')"><span class="pc">◷</span>BYEs</button>
     <button class="tab" data-tab="rondas" onclick="go('rondas')"><span class="pc">♘</span><span id="lblRondas">Rondas</span></button>
     <button class="tab" data-tab="clasif" onclick="go('clasif')"><span class="pc">♕</span>Clasificación</button>
   </nav>
@@ -328,17 +341,19 @@ body.locked .wrap{display:none}
    Sistemas: Suizo (emparejamiento por puntos + Elo) y Eliminatoria directa
    ===================================================================== */
 const STORE='caissa-torneo-v1';
+const LIBSTORE='caissa-biblioteca-jugadores-v2';
 const RES={'1-0':[1,0],'½-½':[.5,.5],'0-1':[0,1],'+-':[1,0],'-+':[0,1]};
 const RES_LABEL={'1-0':'1–0','½-½':'½–½','0-1':'0–1','+-':'+/−','-+':'−/+'};
 const RES_TITLE={'1-0':'Ganan blancas','½-½':'Tablas','0-1':'Ganan negras','+-':'Incomparecencia de negras (gana blancas)','-+':'Incomparecencia de blancas (gana negras)'};
 const TITLES=['','GM','IM','WGM','FM','WIM','CM','WFM','WCM'];
 
 let S=load()||fresh();
+let LIB=loadLibrary();
 let tab='torneo',viewRound=null;
 
 /* ---------- Estado y utilidades ---------- */
 function fresh(){return{name:'Torneo Abierto de Ajedrez',date:new Date().toISOString().slice(0,10),place:'',arbiter:'',
-  format:'swiss',rounds:5,byeValue:1,kFactor:20,status:'setup',players:[],swiss:[],ko:null,nextId:1}}
+  format:'swiss',rounds:5,byeValue:1,kFactor:20,status:'setup',players:[],swiss:[],ko:null,nextId:1,requestedByes:[]}}
 function load(){try{const s=JSON.parse(localStorage.getItem(STORE));return s&&Array.isArray(s.players)?s:null}catch(e){return null}}
 function save(){try{localStorage.setItem(STORE,JSON.stringify(S))}catch(e){}}
 function commit(){save();render()}
@@ -356,13 +371,160 @@ function go(t){tab=t;render();window.scrollTo&&window.scrollTo({top:0,behavior:'
 function empty(pc,h,p,extra=''){return `<div class="card"><div class="empty"><div class="pc">${pc}</div><h3>${h}</h3><p>${p}</p>${extra}</div></div>`}
 
 /* =====================================================================
+   BIBLIOTECA PERMANENTE · almacenamiento independiente del torneo
+   ===================================================================== */
+function loadLibrary(){try{const a=JSON.parse(localStorage.getItem(LIBSTORE));return Array.isArray(a)?a.filter(p=>p&&p.name):[]}catch(e){return []}}
+function saveLibrary(){try{localStorage.setItem(LIBSTORE,JSON.stringify(LIB));return true}catch(e){toast('No se pudo guardar la biblioteca. Exporta una copia.');return false}}
+function libUid(){return 'j'+Date.now().toString(36)+Math.random().toString(36).slice(2,9)}
+function norm(s){return String(s||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('es')}
+function validFide(v){return /^\d*$/.test(String(v).trim())}
+function sanitizedPlayer(p){return {name:String(p.name||'').trim(),fide:String(p.fide||'').trim(),elo:Math.max(0,parseInt(p.elo)||0),club:String(p.club||'').trim(),title:TITLES.includes(p.title)?p.title:''}}
+function findLib(p){
+  const id=String(p.libraryId||p.uid||'');if(id){const hit=LIB.find(q=>q.uid===id);if(hit)return hit}
+  const f=String(p.fide||'').trim();if(f){const hit=LIB.find(q=>q.fide===f);if(hit)return hit}
+  return LIB.find(q=>!q.fide&&!f&&norm(q.name)===norm(p.name)&&norm(q.club)===norm(p.club));
+}
+function upsertLibrary(p){
+  if(!p.name||!String(p.name).trim())return null;
+  const hit=findLib(p),data=sanitizedPlayer(p);
+  if(hit){Object.assign(hit,data);saveLibrary();return hit.uid}
+  const item={uid:libUid(),...data};LIB.push(item);saveLibrary();return item.uid;
+}
+function migratePlayersToLibrary(){
+  let changed=false;
+  S.players.forEach(p=>{if(!p.libraryId&&!p.demo){p.libraryId=upsertLibrary(p);changed=true}});
+  if(changed)save();
+}
+function libraryForm(e){
+  e.preventDefault();const name=$('#libName').value.trim(),fide=$('#libFide').value.trim();
+  if(!name)return toast('Introduce el nombre del jugador.');
+  if(!validFide(fide))return toast('El número FIDE solo admite cifras.');
+  if(fide&&LIB.some(p=>p.fide===fide))return toast('Ese número FIDE ya existe en la base. Puedes editar su ficha.');
+  const p={name,fide,elo:$('#libElo').value,club:$('#libClub').value,title:$('#libTitle').value};
+  const dup=findLib(p);if(dup)return toast('Ya existe una ficha de ese jugador. Edita la ficha existente.');
+  upsertLibrary(p);commit();toast('Ficha guardada en la base permanente.');
+}
+function libraryEdit(i,f,v){
+  const p=LIB[i];if(!p)return;
+  const val=String(v||'').trim();
+  if(f==='name'&&!val)return toast('El nombre no puede quedar vacío.');
+  if(f==='fide'&&(!validFide(val)||LIB.some((x,j)=>j!==i&&val&&x.fide===val)))return toast('Número FIDE inválido o duplicado.');
+  p[f]=f==='elo'?Math.max(0,parseInt(val)||0):val;
+  saveLibrary();render();
+}
+function libraryDelete(i){
+  const p=LIB[i];if(!p||!confirm('¿Eliminar a '+p.name+' de la base permanente? Los torneos ya creados no se modificarán.'))return;
+  LIB.splice(i,1);saveLibrary();commit();
+}
+function libraryFilter(input,cls){
+  const q=norm(input.value);
+  document.querySelectorAll('.'+cls).forEach(el=>{el.style.display=norm(el.dataset.search).includes(q)?'':'none'});
+}
+function alreadyRegistered(p){return S.players.some(x=>(x.libraryId&&x.libraryId===p.uid)||(x.fide&&p.fide&&x.fide===p.fide)||(!x.fide&&!p.fide&&norm(x.name)===norm(p.name)&&norm(x.club)===norm(p.club)))}
+function addFromLibrary(){
+  if(S.status!=='setup')return toast('No se pueden inscribir jugadores después de comenzar el torneo.');
+  const selected=[...document.querySelectorAll('.lib-pick:checked')].map(ch=>LIB.find(p=>p.uid===ch.value)).filter(Boolean);
+  let count=0;
+  selected.forEach(p=>{if(alreadyRegistered(p))return;S.players.push({...sanitizedPlayer(p),id:S.nextId++,libraryId:p.uid});count++});
+  if(!count)return toast('Selecciona jugadores que aún no estén inscritos.');
+  commit();toast(count+' jugadores inscritos desde la base.');
+}
+function exportLibrary(){download('caissa-base-de-jugadores.json',JSON.stringify({app:'Caissa',type:'player-library',version:2,players:LIB},null,2),'application/json');toast('Copia de la base exportada.');}
+function importLibrary(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const rd=new FileReader();rd.onload=()=>{
+    try{
+      const payload=JSON.parse(rd.result);
+      if(payload.type!=='player-library'||!Array.isArray(payload.players))throw Error('Formato incorrecto');
+      let c=0;payload.players.forEach(src=>{
+        if(!src||!src.name||!validFide(src.fide||''))return;
+        const data=sanitizedPlayer(src);
+        if(data.fide&&LIB.some(p=>p.fide===data.fide))return;
+        if(findLib(data))return;
+        LIB.push({uid:libUid(),...data});c++;
+      });
+      saveLibrary();commit();toast(c+' fichas nuevas importadas.');
+    }catch(e){toast('El archivo no es una base de Caïssa válida.');}
+  };
+  rd.readAsText(f);ev.target.value='';
+}
+function vBiblioteca(){
+  const rows=LIB.map((p,i)=>({p,i})).sort((a,b)=>a.p.name.localeCompare(b.p.name,'es'));
+  return `<div class="card"><div class="cardhead"><div><h2>Base permanente de jugadores · ${LIB.length}</h2>
+    <p class="sub">Se conserva aunque crees nuevos torneos. Los números FIDE se introducen manualmente.</p></div>
+    <div class="actions"><button class="btn sm" onclick="exportLibrary()">⤓ Copia de seguridad</button>
+    <button class="btn sm" onclick="document.getElementById('libFile').click()">⤒ Recuperar fichas</button>
+    <input id="libFile" type="file" hidden accept=".json,application/json" onchange="importLibrary(event)"></div></div>
+    <form class="grid g3" onsubmit="libraryForm(event)">
+      <label class="f">Nombre y apellidos<input class="in" id="libName" required placeholder="Nombre completo"></label>
+      <label class="f">ID FIDE (si lo tiene)<input class="in" id="libFide" inputmode="numeric" pattern="[0-9]*" placeholder="Número FIDE"></label>
+      <label class="f">Elo<input class="in" id="libElo" type="number" min="0" max="3500" placeholder="0"></label>
+      <label class="f">Club<input class="in" id="libClub" placeholder="Opcional"></label>
+      <label class="f">Título<select class="in" id="libTitle">${TITLES.map(t=>`<option value="${t}">${t||'Sin título'}</option>`).join('')}</select></label>
+      <div style="align-self:end"><button class="btn gold" type="submit">＋ Guardar ficha</button></div>
+    </form>
+    <p class="info-note">Los datos quedan guardados en este dispositivo. Exporta regularmente la base: borrar los datos de la aplicación o desinstalarla podría eliminarla. El ID FIDE no se verifica online.</p>
+  </div>
+  <div class="card"><div class="cardhead"><div><h2>Directorio</h2><p class="sub">Consulta y modifica fichas. Las correcciones no alteran automáticamente torneos anteriores.</p></div></div>
+    <div class="library-tools"><input class="in" style="max-width:390px" type="search" oninput="libraryFilter(this,'lib-row')" placeholder="Buscar por nombre, FIDE o club…"></div>
+    ${rows.length?`<div class="tw"><table class="t"><thead><tr><th>Nombre</th><th>ID FIDE</th><th>Elo</th><th>Club</th><th>Título</th><th></th></tr></thead><tbody>
+      ${rows.map(({p,i})=>`<tr class="lib-row" data-search="${esc(p.name+' '+p.fide+' '+p.club)}">
+        <td><input class="cell-in" value="${esc(p.name)}" aria-label="Nombre" onchange="libraryEdit(${i},'name',this.value)"></td>
+        <td><input class="cell-in fide-mark" style="min-width:110px" inputmode="numeric" value="${esc(p.fide)}" placeholder="—" aria-label="ID FIDE" onchange="libraryEdit(${i},'fide',this.value)"></td>
+        <td><input class="cell-in num" style="min-width:75px" type="number" min="0" max="3500" value="${p.elo||''}" aria-label="Elo" onchange="libraryEdit(${i},'elo',this.value)"></td>
+        <td><input class="cell-in" style="min-width:110px" value="${esc(p.club)}" aria-label="Club" onchange="libraryEdit(${i},'club',this.value)"></td>
+        <td><select class="cell-in" aria-label="Título" onchange="libraryEdit(${i},'title',this.value)">${TITLES.map(t=>`<option value="${t}" ${t===p.title?'selected':''}>${t||'—'}</option>`).join('')}</select></td>
+        <td><button class="btn danger sm" onclick="libraryDelete(${i})" title="Eliminar ficha">✕</button></td></tr>`).join('')}
+      </tbody></table></div>`:`<div class="empty"><div class="pc">♙</div><h3>Tu biblioteca está vacía</h3><p>Añade tu primer jugador y se conservará para próximos torneos.</p></div>`}
+  </div>`;
+}
+/* =====================================================================
+   BYES APROBADOS POR EL ÁRBITRO (solo sistema suizo)
+   ===================================================================== */
+function byeRequests(){return Array.isArray(S.requestedByes)?S.requestedByes:[]}
+function byePoints(g){return Number.isFinite(+g.points)&&g.points!=null?+g.points:+S.byeValue}
+function createBye(e){
+  e.preventDefault();if(S.format!=='swiss')return toast('Los BYEs solicitados solo se aplican al sistema suizo.');
+  const id=+$('#byePlayer').value,r=+$('#byeRound').value,pts=+$('#byePoints').value,note=$('#byeNote').value.trim();
+  if(!P(id)||!Number.isInteger(r)||r<=S.swiss.length||r>S.rounds||![0,.5,1].includes(pts))return toast('Selecciona un jugador y una ronda futura válidos.');
+  S.requestedByes=byeRequests();const prev=S.requestedByes.find(b=>b.playerId===id&&b.round===r);
+  if(prev){prev.points=pts;prev.note=note}else S.requestedByes.push({playerId:id,round:r,points:pts,note});
+  commit();toast('BYE registrado para la ronda '+r+'.');
+}
+function deleteBye(i){const b=byeRequests()[i];if(!b)return;
+  if(b.round<=S.swiss.length)return toast('Deshaz la ronda emparejada antes de cambiar este BYE.');
+  if(!confirm('¿Cancelar el BYE de '+(P(b.playerId)?.name||'este jugador')+' en la ronda '+b.round+'?'))return;
+  S.requestedByes.splice(i,1);commit();
+}
+function vByes(){
+  if(S.format!=='swiss')return empty('♘','BYEs para sistema suizo','En eliminatoria directa no se pueden conceder ausencias puntuadas. Selecciona sistema suizo para usar esta función.');
+  const all=byeRequests();const list=all.map((b,i)=>({b,i})).filter(({b})=>P(b.playerId)).sort((a,b)=>a.b.round-b.b.round||P(a.b.playerId).name.localeCompare(P(b.b.playerId).name));
+  const possible=Array.from({length:S.rounds},(_,i)=>i+1).filter(r=>r>S.swiss.length);
+  return `<div class="card"><div class="cardhead"><div><h2>BYEs solicitados · Gestión arbitral</h2><p class="sub">El árbitro registra el descanso aprobado y su puntuación antes del emparejamiento.</p></div></div>
+    <p class="info-note">Un BYE solicitado excluye al jugador de la ronda indicada y suma 0, ½ o 1 punto. Es distinto del descanso automático por número impar. Comprueba las bases y el reglamento de tu torneo antes de concederlo.</p>
+    ${possible.length&&S.players.length?`<form onsubmit="createBye(event)" class="grid g3">
+      <label class="f">Jugador<select class="in" id="byePlayer">${seedList().map(p=>`<option value="${p.id}">${esc(p.name)}${p.fide?' · '+esc(p.fide):''}</option>`).join('')}</select></label>
+      <label class="f">Ronda<select class="in" id="byeRound">${possible.map(r=>`<option value="${r}">Ronda ${r}</option>`).join('')}</select></label>
+      <label class="f">Puntos<select class="in" id="byePoints"><option value="0">0 puntos</option><option value="0.5" selected>½ punto</option><option value="1">1 punto</option></select></label>
+      <label class="f">Observación (opcional)<input class="in" id="byeNote" placeholder="Motivo o aclaración"></label>
+      <div style="align-self:end"><button class="btn gold" type="submit">♙ Conceder BYE</button></div>
+    </form>`:`<p class="hint">${S.players.length?'No quedan rondas futuras. Para corregir un BYE de una ronda ya emparejada, deshaz esa ronda.':'Inscribe jugadores para poder registrar BYEs.'}</p>`}
+  </div>
+  <div class="card"><h2>BYEs registrados · ${list.length}</h2><p class="sub">Los BYEs de rondas ya emparejadas se muestran como aplicados.</p>
+    ${list.length?list.map(({b,i})=>`<div class="bye-request"><div><strong>${esc(P(b.playerId).name)}</strong><div class="lib-mini">Ronda ${b.round}${b.note?' · '+esc(b.note):''}</div></div>
+      <div class="row"><span class="bye-tag">${fp(b.points)} ${+b.points===1?'punto':'puntos'} · ${b.round<=S.swiss.length?'Aplicado':'Aprobado'}</span>
+      ${b.round>S.swiss.length?`<button class="btn danger sm" onclick="deleteBye(${i})">Cancelar</button>`:''}</div></div>`).join(''):`<div class="empty"><div class="pc">♙</div><h3>Sin solicitudes de BYE</h3><p>Registra aquí los descansos aprobados antes de emparejar las rondas.</p></div>`}
+  </div>`;
+}
+
+/* =====================================================================
    SISTEMA SUIZO
    ===================================================================== */
 function swissStats(upto=S.swiss.length){
   const st={};
   S.players.forEach(p=>st[p.id]={id:p.id,pts:0,opps:[],colors:[],games:[],wins:0,byes:0});
   S.swiss.slice(0,upto).forEach(rd=>rd.forEach(g=>{
-    if(g.b==null){const s=st[g.w];if(s){s.pts+=+S.byeValue;s.byes++}return}
+    if(g.b==null){const s=st[g.w];if(s){s.pts+=byePoints(g);s.byes++}return}
     const W=st[g.w],B=st[g.b];if(!W||!B)return;
     W.opps.push(g.b);B.opps.push(g.w);W.colors.push('W');B.colors.push('B');
     if(g.result&&RES[g.result]){
@@ -401,12 +563,14 @@ function swissFinished(){return S.format==='swiss'&&S.status!=='setup'&&S.swiss.
    mitad inferior (sistema holandés), sin revanchas y con equilibrio de colores. */
 function pairRound(){
   const st=swissStats(),ri=S.swiss.length;
-  const pool=S.players.map(p=>p.id).sort((a,b)=>st[b].pts-st[a].pts||elo(b)-elo(a)||P(a).name.localeCompare(P(b).name));
-  const games=[];
+  const planned=byeRequests().filter(b=>b.round===ri+1&&S.players.some(p=>p.id===b.playerId));
+  const requested=new Set(planned.map(b=>b.playerId));
+  const pool=S.players.map(p=>p.id).filter(id=>!requested.has(id)).sort((a,b)=>st[b].pts-st[a].pts||elo(b)-elo(a)||P(a).name.localeCompare(P(b).name));
+  const games=planned.map(b=>({w:b.playerId,b:null,result:'bye',type:'requested',points:b.points}));
   if(pool.length%2){ // descanso: jugador peor clasificado que aún no lo haya tenido
     let k=-1;for(let i=pool.length-1;i>=0;i--)if(st[pool[i]].byes===0){k=i;break}
     if(k<0)k=pool.length-1;
-    games.push({w:pool.splice(k,1)[0],b:null,result:'bye'});
+    games.push({w:pool.splice(k,1)[0],b:null,result:'bye',type:'automatic',points:+S.byeValue});
   }
   const pos={},ideal={};pool.forEach((id,i)=>pos[id]=i);
   for(let i=0;i<pool.length;){
@@ -466,7 +630,7 @@ function undoRound(){
   if(!S.swiss.length){S.status='setup';tab='torneo'}
   commit();
 }
-function setRounds(v){S.rounds=Math.max(S.swiss.length||1,Math.min(30,parseInt(v)||1));commit()}
+function setRounds(v){const n=Math.max(S.swiss.length||1,Math.min(30,parseInt(v)||1));if(byeRequests().some(b=>b.round>n))return toast('Cancela primero los BYEs programados fuera del nuevo número de rondas.');S.rounds=n;commit()}
 
 /* =====================================================================
    ELIMINATORIA DIRECTA
@@ -533,22 +697,29 @@ function startTournament(){
 }
 function resetTournament(){if(!confirm('¿Borrar todos los emparejamientos y resultados? La lista de jugadores se conserva.'))return;
   S.status='setup';S.swiss=[];S.ko=null;viewRound=null;tab='torneo';commit()}
-function newTournament(){if(!confirm('¿Crear un torneo nuevo? Se borrarán jugadores y resultados (exporta antes si quieres conservarlos).'))return;
+function newTournament(){if(!confirm('¿Crear un torneo nuevo? Se borrarán los participantes y resultados de este torneo. La base permanente de jugadores se conserva (exporta el torneo si lo necesitas).'))return;
   S=fresh();viewRound=null;tab='torneo';commit()}
 function setFormat(f){if(S.status!=='setup')return;S.format=f;commit()}
 
 function addPlayer(e){
-  e.preventDefault();
-  const name=$('#pName').value.trim();if(!name)return;
-  S.players.push({id:S.nextId++,name,title:$('#pTitle').value,elo:parseInt($('#pElo').value)||0,club:$('#pClub').value.trim()});
-  commit();toast(`${name} inscrito`);setTimeout(()=>$('#pName')?.focus(),0);
+  e.preventDefault();if(S.status!=='setup')return;
+  const name=$('#pName').value.trim(),fide=$('#pFide').value.trim();if(!name)return;
+  if(!validFide(fide))return toast('El ID FIDE solo admite cifras.');
+  const p={name,fide,title:$('#pTitle').value,elo:parseInt($('#pElo').value)||0,club:$('#pClub').value.trim()};
+  if(alreadyRegistered({...p,uid:null}))return toast('Ese jugador ya está inscrito en el torneo.');
+  p.libraryId=upsertLibrary(p);
+  S.players.push({...p,id:S.nextId++});commit();toast(name+' inscrito y guardado en la base');setTimeout(()=>$('#pName')?.focus(),0);
 }
 function bulkAdd(){
+  if(S.status!=='setup')return;
   const lines=$('#bulk').value.split('\n').map(l=>l.trim()).filter(Boolean);let c=0;
-  lines.forEach(l=>{const [name,e,club,title]=l.split(/[,;\t]/).map(x=>(x||'').trim());if(!name)return;
-    const t=(title||'').toUpperCase();
-    S.players.push({id:S.nextId++,name,elo:parseInt(e)||0,club:club||'',title:TITLES.includes(t)?t:''});c++});
-  commit();toast(`${c} jugador${c===1?'':'es'} importado${c===1?'':'s'}`);
+  lines.forEach(l=>{
+    const [name,e,club,title,fide]=l.split(/[,;\t]/).map(x=>(x||'').trim());if(!name||!validFide(fide||''))return;
+    const t=(title||'').toUpperCase(),p={name,elo:parseInt(e)||0,club:club||'',title:TITLES.includes(t)?t:'',fide:fide||''};
+    if(alreadyRegistered({...p,uid:null}))return;
+    p.libraryId=upsertLibrary(p);S.players.push({...p,id:S.nextId++});c++;
+  });
+  commit();toast(c+' jugadores nuevos inscritos y guardados');
 }
 function demo(){
   const d=[['Magnus Carlsen',2833,'Noruega','GM'],['Hikaru Nakamura',2804,'EE. UU.','GM'],['Fabiano Caruana',2795,'EE. UU.','GM'],
@@ -556,25 +727,32 @@ function demo(){
   ['Alireza Firouzja',2760,'Francia','GM'],['Anish Giri',2745,'Países Bajos','GM'],['Francisco Vallejo',2693,'España','GM'],
   ['Jaime Santos Latasa',2672,'España','GM'],['David Antón Guijarro',2650,'España','GM'],['Sara Khadem',2460,'España','IM'],
   ['Lucía Martín',1985,'Club Ajedrez Valencia','']];
-  d.forEach(([name,e,club,title])=>S.players.push({id:S.nextId++,name,elo:e,club,title}));
-  commit();toast('Jugadores de ejemplo cargados');
+  d.forEach(([name,e,club,title])=>{if(!alreadyRegistered({name,fide:'',club}))S.players.push({id:S.nextId++,name,elo:e,club,title,fide:'',demo:true})});
+  commit();toast('Jugadores de demostración cargados (no se guardan en la biblioteca)');
 }
-function delPlayer(id){if(S.status!=='setup')return;S.players=S.players.filter(p=>p.id!==id);commit()}
-function clearPlayers(){if(!confirm('¿Eliminar a todos los jugadores?'))return;S.players=[];commit()}
-function edit(id,f,v){const p=P(id);if(!p)return;p[f]=f==='elo'?(parseInt(v)||0):String(v).trim();commit()}
+function delPlayer(id){if(S.status!=='setup')return;S.players=S.players.filter(p=>p.id!==id);S.requestedByes=byeRequests().filter(b=>b.playerId!==id);commit()}
+function clearPlayers(){if(S.status!=='setup'||!confirm('¿Eliminar a todos los participantes de este torneo? Permanecen guardados en la base.'))return;S.players=[];S.requestedByes=[];commit()}
+function edit(id,f,v){
+  const p=P(id);if(!p)return;
+  const val=String(v||'').trim();
+  if(f==='name'&&!val)return toast('El nombre no puede quedar vacío.');
+  if(f==='fide'&&(!validFide(val)||S.players.some(x=>x.id!==id&&val&&x.fide===val)))return toast('ID FIDE inválido o repetido.');
+  p[f]=f==='elo'?Math.max(0,parseInt(v)||0):val;
+  p.libraryId=upsertLibrary(p);commit();
+}
 
 function download(name,content,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500)}
 function exportJSON(){download(slug(S.name)+'.json',JSON.stringify(S,null,2),'application/json');toast('Torneo exportado')}
 function importJSON(e){const f=e.target.files[0];if(!f)return;const rd=new FileReader();
-  rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.players))throw 0;S=Object.assign(fresh(),d);viewRound=null;commit();toast('Torneo cargado correctamente')}catch(err){toast('El archivo no es un torneo válido')}};
+  rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.players))throw 0;S=Object.assign(fresh(),d);S.nextId=Math.max(+S.nextId||1,...S.players.map(p=>(+p.id||0)+1));migratePlayersToLibrary();viewRound=null;commit();toast('Torneo cargado correctamente')}catch(err){toast('El archivo no es un torneo válido')}};
   rd.readAsText(f);e.target.value=''}
 function exportCSV(){
   let rows;
   if(S.format==='swiss'){const {list}=swissStandings();
-    rows=[['Pos','Título','Nombre','Elo','Club','Puntos','Buchholz-1','Buchholz','Sonneborn-Berger','Victorias','Performance','Delta Elo']];
-    list.forEach((s,i)=>{const p=P(s.id);rows.push([i+1,p.title,p.name,p.elo||'',p.club,s.pts,s.buchCut,s.buch,s.sb,s.wins,s.perf??'',s.delta==null?'':s.delta.toFixed(1)])});
-  }else{rows=[['Puesto','Semilla','Título','Nombre','Elo','Club','Resultado']];
-    koPlacements().forEach(x=>{const p=P(x.id);rows.push([x.place,x.seed,p.title,p.name,p.elo||'',p.club,x.label])});}
+    rows=[['Pos','Título','Nombre','ID FIDE','Elo','Club','Puntos','Buchholz-1','Buchholz','Sonneborn-Berger','Victorias','Performance','Delta Elo']];
+    list.forEach((s,i)=>{const p=P(s.id);rows.push([i+1,p.title,p.name,p.fide||'',p.elo||'',p.club,s.pts,s.buchCut,s.buch,s.sb,s.wins,s.perf??'',s.delta==null?'':s.delta.toFixed(1)])});
+  }else{rows=[['Puesto','Semilla','Título','Nombre','ID FIDE','Elo','Club','Resultado']];
+    koPlacements().forEach(x=>{const p=P(x.id);rows.push([x.place,x.seed,p.title,p.name,p.fide||'',p.elo||'',p.club,x.label])});}
   const csv='\ufeff'+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(';')).join('\r\n');
   download(slug(S.name)+'-clasificacion.csv',csv,'text/csv;charset=utf-8');
 }
@@ -631,6 +809,8 @@ function vTorneo(){
              :`<button class="btn gold" ${n<2?'disabled':''} onclick="startTournament()">♟ Comenzar torneo</button>
                <button class="btn" onclick="go('jugadores')">♙ Gestionar jugadores</button>`}
       <button class="btn danger" onclick="newTournament()">✕ Nuevo torneo</button>
+      <button class="btn" onclick="go('biblioteca')">♙ Base de jugadores</button>
+      ${S.format==='swiss'?`<button class="btn" onclick="go('byes')">◷ Gestionar BYEs</button>`:''}
     </div>
   </div>`;
 }
@@ -641,22 +821,35 @@ function vJugadores(){
     <form class="addrow" onsubmit="addPlayer(event)">
       <input class="in" id="pName" placeholder="Nombre y apellidos" required autocomplete="off">
       ${titleSel('','in','id="pTitle"')}
+      <input class="in" id="pFide" inputmode="numeric" pattern="[0-9]*" placeholder="ID FIDE">
       <input class="in" id="pElo" type="number" min="0" max="3500" placeholder="Elo">
       <input class="in" id="pClub" placeholder="Club / federación">
       <button class="btn gold" type="submit">＋ Añadir</button>
     </form>
     <details class="bulk"><summary>Importar lista de jugadores</summary>
-      <p class="hint">Un jugador por línea, separando por comas, punto y coma o tabulador: <code>Nombre, Elo, Club, Título</code> (puedes pegar directamente desde Excel).</p>
+      <p class="hint">Un jugador por línea, separando por comas, punto y coma o tabulador: <code>Nombre, Elo, Club, Título, ID FIDE</code> (puedes pegar directamente desde Excel).</p>
       <textarea class="in" id="bulk" rows="6" placeholder="Magnus Carlsen, 2833, Noruega, GM&#10;Lucía Martín, 1985, Club Ajedrez Valencia"></textarea>
       <div class="row"><button class="btn" onclick="bulkAdd()">Importar lista</button><button class="btn" onclick="demo()">♞ Cargar jugadores de ejemplo</button></div>
-    </details></div>`}
+    </details></div>
+    <div class="card"><div class="cardhead"><div><h2>Inscribir desde base de jugadores</h2>
+      <p class="sub">Selecciona una o varias fichas. No necesitas escribir los datos de nuevo.</p></div>
+      <button class="btn sm" onclick="go('biblioteca')">♙ Abrir base de jugadores</button></div>
+      ${LIB.length?`<div class="library-tools"><input class="in" style="max-width:400px" type="search" placeholder="Buscar nombre, club o ID FIDE" oninput="libraryFilter(this,'pick-row')">
+        <button class="btn gold" onclick="addFromLibrary()">＋ Inscribir seleccionados</button></div>
+        <div class="tw"><table class="t"><thead><tr><th></th><th>Nombre</th><th>ID FIDE</th><th>Elo</th><th>Club</th></tr></thead><tbody>
+          ${LIB.filter(p=>!alreadyRegistered(p)).sort((a,b)=>a.name.localeCompare(b.name,'es')).map(p=>`<tr class="pick-row" data-search="${esc(p.name+' '+p.fide+' '+p.club)}">
+            <td><input type="checkbox" class="lib-pick" value="${esc(p.uid)}" aria-label="Seleccionar ${esc(p.name)}"></td>
+            <td>${esc(p.name)}</td><td class="fide-mark">${esc(p.fide||'—')}</td><td>${p.elo||'—'}</td><td>${esc(p.club||'—')}</td></tr>`).join('')}
+        </tbody></table></div>`:`<p class="hint">La base está vacía. Añade jugadores normalmente o crea fichas desde la pestaña Base de jugadores.</p>`}
+    </div>`}
   <div class="card"><div class="cardhead"><div><h2>Participantes · ${list.length}</h2>
     <p class="sub">Ordenados por Elo (número inicial). ${locked?'Torneo en curso: puedes corregir datos, pero no añadir ni retirar jugadores.':'Haz clic en cualquier dato para editarlo.'}</p></div>
     ${!locked&&list.length?`<div class="actions"><button class="btn sm danger" onclick="clearPlayers()">Vaciar lista</button></div>`:''}</div>
-  ${list.length?`<div class="tw"><table class="t"><thead><tr><th class="num">Nº</th><th>Título</th><th>Nombre</th><th class="num">Elo</th><th>Club / federación</th><th></th></tr></thead><tbody>
+  ${list.length?`<div class="tw"><table class="t"><thead><tr><th class="num">Nº</th><th>Título</th><th>Nombre</th><th>ID FIDE</th><th class="num">Elo</th><th>Club / federación</th><th></th></tr></thead><tbody>
     ${list.map((p,i)=>`<tr><td class="num rank">${i+1}</td>
       <td>${titleSel(p.title||'','cell-in',`onchange="edit(${p.id},'title',this.value)"`)}</td>
       <td><input class="cell-in" value="${esc(p.name)}" onchange="edit(${p.id},'name',this.value)"></td>
+      <td><input class="cell-in fide-mark" style="min-width:100px" inputmode="numeric" value="${esc(p.fide||'')}" placeholder="—" onchange="edit(${p.id},'fide',this.value)"></td>
       <td class="num"><input class="cell-in num" style="width:84px" type="number" min="0" max="3500" value="${p.elo||''}" placeholder="—" onchange="edit(${p.id},'elo',this.value)"></td>
       <td><input class="cell-in" value="${esc(p.club)}" placeholder="—" onchange="edit(${p.id},'club',this.value)"></td>
       <td class="num">${locked?'':`<button class="btn sm danger" title="Retirar" onclick="delPlayer(${p.id})">✕</button>`}</td></tr>`).join('')}
@@ -676,7 +869,7 @@ function vSwiss(){
   const boards=games.map((g,gi)=>{
     if(g.b==null)return `<div class="board done bye"><div class="bno pc">♙</div>
       <div class="pl"><span class="pc w">♙</span><div class="who"><span class="nm">${pname(g.w)}</span><span class="meta">${meta(g.w)}</span></div></div>
-      <div class="res">+${fp(+S.byeValue)}</div><div class="pl r"><div class="who"><span class="nm muted">Descansa (bye)</span></div></div></div>`;
+      <div class="res">+${fp(byePoints(g))}</div><div class="pl r"><div class="who"><span class="nm muted">${g.type==='requested'?'BYE solicitado · aprobado':'Descanso automático'}</span></div></div></div>`;
     const res=g.result,[sw,sb]=res?RES[res]:[null,null],cls=s=>s==null?'':s===1?'winner':s===0?'loser':'';
     return `<div class="board ${res?'done':''}"><div class="bno">${gi+1}</div>
       <div class="pl ${cls(sw)}"><span class="pc w">♔</span><div class="who"><span class="nm">${pname(g.w)}</span><span class="meta">${meta(g.w)}</span></div></div>
@@ -736,7 +929,7 @@ function vClasif(){
   const {list}=swissStandings(),sn=startNo(),fin=swissFinished(),R=S.swiss.length;
   const hist=(id,r)=>{
     const g=S.swiss[r].find(g=>g.w===id||g.b===id);if(!g)return `<span class="hc bye">—</span>`;
-    if(g.b==null)return `<span class="hc bye" title="Descanso">bye</span>`;
+    if(g.b==null)return `<span class="hc bye" title="${g.type==='requested'?'BYE solicitado':'Descanso automático'}">B${fp(byePoints(g))}</span>`;
     const white=g.w===id,opp=white?g.b:g.w;let s='·';
     if(g.result){const v=RES[g.result][white?0:1],f=g.result.includes('+');s=f?(v?'+':'−'):(v===1?'1':v===0?'0':'½')}
     return `<span class="hc ${white?'w':'b'}" title="R${r+1}: ${white?'blancas':'negras'} vs ${esc(P(opp)?.name)}">${sn[opp]}<b>${s}</b></span>`;
@@ -766,7 +959,7 @@ function render(){
   const b=$('#tBadge');b.className='badge '+cls;b.textContent=txt;
   $('#lblRondas').textContent=S.format==='ko'?'Cuadro':'Rondas';
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===tab));
-  $('#view').innerHTML=({torneo:vTorneo,jugadores:vJugadores,rondas:vRondas,clasif:vClasif})[tab]();
+  $('#view').innerHTML=({torneo:vTorneo,jugadores:vJugadores,biblioteca:vBiblioteca,byes:vByes,rondas:vRondas,clasif:vClasif})[tab]();
   document.title=`${S.name} · Caïssa`;
 }
 
@@ -833,7 +1026,7 @@ function lock(msg,bad=true){
 }
 function unlock(){
   document.body.classList.remove('locked');$('#lic').classList.remove('on');$('#licErr').textContent='';
-  updateBadge();$('#licPrint').textContent=`Licencia de uso personal para ${LIC.name} · ${legal().replace(/&amp;/g,'&')}`;
+  migratePlayersToLibrary();updateBadge();$('#licPrint').textContent=`Licencia de uso personal para ${LIC.name} · ${legal().replace(/&amp;/g,'&')}`;
   render();booted=true;
 }
 function updateBadge(){
@@ -870,45 +1063,12 @@ function copyDev(){const t=devState().d;
 })();
 </script>
 <script>
-/* Puente Android de Caïssa: guardar archivos, imprimir y copiar al portapapeles */
-(function () {
-  var A = window.CaissaAndroid;
-  if (!A || window.__caissaBridge) return;
-  window.__caissaBridge = true;
-
-  window.print = function () { A.print(document.title || 'Caissa'); };
-
-  try {
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: function (t) { A.copy(String(t)); return Promise.resolve(); } }
-    });
-  } catch (e) {}
-
-  document.addEventListener('click', function (e) {
-    var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
-    if (!a || !/^(blob:|data:)/.test(a.href)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    var name = a.getAttribute('download') || 'archivo';
-    fetch(a.href).then(function (r) { return r.blob(); }).then(function (b) {
-      var fr = new FileReader();
-      fr.onload = function () {
-        var s = String(fr.result), i = s.indexOf(',');
-        var mime = (b.type || 'application/octet-stream').split(';')[0];
-        A.saveFile(name, mime, s.slice(i + 1));
-      };
-      fr.readAsDataURL(b);
-    });
-  }, true);
-})();
-
-</script>
-<script>
-/* En HTTPS, preparar uso sin conexion de esta aplicacion. */
+/* PWA iPhone: buscar versiones recientes del contenido, sin tocar licencias ni torneos. */
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js').catch(function () {});
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+      .then(function (reg) { return reg.update().catch(function () {}); })
+      .catch(function () {});
   });
 }
 </script>
